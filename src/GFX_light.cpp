@@ -102,10 +102,11 @@ static const unsigned char font[] PROGMEM = {
     0x08, 0x08, 0x2A, 0x1C, 0x08  // 126 ~
 };
 
-GFX_light::GFX_light(int16_t w, int16_t h) : 
-  _width(w), _height(h), _cursorX(0), _cursorY(0), 
+GFX_light::GFX_light(int16_t w, int16_t h) :
+  WIDTH(w), HEIGHT(h), rotation(0),
+  _width(w), _height(h), _cursorX(0), _cursorY(0),
   _textSize(1), _textColor(WHITE), _textBgColor(BLACK),
-  _textWrap(true), WIDTH(w), HEIGHT(h), rotation(0) {
+  _textWrap(true) {
 }
 
 void GFX_light::drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) {
@@ -167,7 +168,7 @@ size_t GFX_light::write(uint8_t c) {
   
   drawChar(_cursorX, _cursorY, c, _textColor, _textBgColor, _textSize);
     _cursorX += _textSize * (FONT_WIDTH + CHAR_SPACING);
-  if (_textWrap && (_cursorX + _textSize * (FONT_WIDTH + CHAR_SPACING)) > WIDTH) {
+  if (_textWrap && (_cursorX + _textSize * (FONT_WIDTH + CHAR_SPACING)) > _width) {
     _cursorX = 0;
     _cursorY += _textSize * FONT_HEIGHT;
   }
@@ -185,42 +186,34 @@ void GFX_light::drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
   int16_t charFullWidth = (FONT_WIDTH + CHAR_SPACING) * size;
   int16_t charHeight = FONT_HEIGHT * size;
   
-  if(x >= WIDTH || y >= HEIGHT || 
-     (x + charFullWidth - 1) < 0 || 
+  if(x >= _width || y >= _height ||
+     (x + charFullWidth - 1) < 0 ||
      (y + charHeight - 1) < 0) {
     return;
   }
-    uint16_t index = (c - 32) * FONT_WIDTH;
-  for(int8_t col = 0; col < FONT_WIDTH; col++) {
-    uint8_t line = pgm_read_byte(&font[index + col]);
-        uint8_t original_line = line;
-        for(int8_t row = 0; row < FONT_HEIGHT; row++) {
-      if(original_line & 0x01) {
-        if(size == 1) {
-          drawPixel(x + col, y + row, color);
+  uint16_t index = (c - 32) * FONT_WIDTH;
+  int8_t fullWidth = FONT_WIDTH + CHAR_SPACING;
+  for(int8_t row = 0; row < FONT_HEIGHT; row++) {
+    int8_t colStart = 0;
+    while (colStart < fullWidth) {
+      uint8_t bit = (colStart < FONT_WIDTH) ? ((pgm_read_byte(&font[index + colStart]) >> row) & 0x01) : 0;
+      int8_t colEnd = colStart + 1;
+      while (colEnd < fullWidth) {
+        uint8_t b = (colEnd < FONT_WIDTH) ? ((pgm_read_byte(&font[index + colEnd]) >> row) & 0x01) : 0;
+        if (b != bit) break;
+        colEnd++;
+      }
+      if (bit || bg != color) {
+        uint16_t runColor = bit ? color : bg;
+        if (size == 1) {
+          for (int8_t col = colStart; col < colEnd; col++) {
+            drawPixel(x + col, y + row, runColor);
+          }
         } else {
-          fillRect(x + col * size, y + row * size, size, size, color);
-        }
-      } else if(bg != color) {
-        if(size == 1) {
-          drawPixel(x + col, y + row, bg);
-        } else {
-          fillRect(x + col * size, y + row * size, size, size, bg);
+          fillRect(x + colStart * size, y + row * size, (int16_t)(colEnd - colStart) * size, size, runColor);
         }
       }
-      original_line >>= 1;
-    }
-  }
-  
-  if(bg != color) {
-    for(int8_t col = FONT_WIDTH; col < FONT_WIDTH + CHAR_SPACING; col++) {
-      for(int8_t row = 0; row < FONT_HEIGHT; row++) {
-        if(size == 1) {
-          drawPixel(x + col, y + row, bg);
-        } else {
-          fillRect(x + col * size, y + row * size, size, size, bg);
-        }
-      }
+      colStart = colEnd;
     }
   }
 }
